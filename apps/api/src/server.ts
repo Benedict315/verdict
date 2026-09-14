@@ -1,0 +1,71 @@
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { ZodError } from 'zod';
+import { initSchema } from './db';
+import { apiRouter } from './routes';
+
+dotenv.config();
+
+export const app = express();
+const port = process.env.PORT || 4000;
+
+// Standard middleware
+app.use(cors());
+app.use(express.json());
+
+// Request logging
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  const start = Date.now();
+  next();
+  // Simple non-blocking log
+  console.log(`[API] ${req.method} ${req.url} - ${Date.now() - start}ms`);
+});
+
+// Additive health check (independent, outside frozen Step 5 contract)
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Mount Step 5 API routes
+app.use(apiRouter);
+
+// Centralized error handling
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'Validation failed',
+      details: err.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    });
+  }
+
+  console.error('[Server Error]', err);
+  return res.status(500).json({
+    error: 'Internal Server Error',
+    message: err instanceof Error ? err.message : 'Unknown error',
+  });
+});
+
+// Start server and apply database schema idempotently
+export function startServer(): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      initSchema();
+    } catch (err) {
+      console.error('[Verdict DB] Error initializing schema:', err);
+    }
+
+    app.listen(port, () => {
+      console.log(`[Verdict API] Server listening on port ${port}`);
+      resolve();
+    });
+  });
+}
+
+if (require.main === module) {
+  startServer();
+}
