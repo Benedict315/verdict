@@ -1,0 +1,26 @@
+{
+  "name": "verdict-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verdict - Pre-action security gate for autonomous agents",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace=apps/api run dev",
+    "dev:web": "npm --workspace=apps/web run dev",
+    "build": "npm run build --workspaces --if-present",
+    "test:api": "tsx scripts/verify-phase1.ts",
+    "seed": "npm --workspace=apps/api run seed"
+  },
+  "keywords": [
+    "verdict",
+    "ai-agents",
+    "security-gate",
+    "base-sepolia",
+    "hackathon"
+  ],
+  "author": "",
+  "license": "MIT"
+}
