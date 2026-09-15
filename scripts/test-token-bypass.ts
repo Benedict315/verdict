@@ -232,37 +232,83 @@ async function runBypassSuite() {
     `Received status ${resExpiredExec.status}`
   );
 
-  console.log('\n--- Test 5: Token Issued for a Different actionRequestId ---');
-  // Create Action B
-  const resAlphaEval2 = await request({
+  console.log('\n--- Test 5: Token Issued for a Different actionRequestId (Isolation Verified) ---');
+  // 1. Create brand-new Action A
+  const resEvalA = await request({
     method: 'POST',
     path: '/trust/evaluate',
     body: {
       agentId: 'agent-alpha',
       actionType: 'transfer',
       targetAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
-      amount: 15,
+      amount: 20,
       token: 'USDC',
     },
   });
-  const actionBId = resAlphaEval2.data.actionRequestId;
-  const tokenB = resAlphaEval2.data.authorizationToken;
+  const actionAId = resEvalA.data.actionRequestId;
+  const tokenA = resEvalA.data.authorizationToken;
 
-  // Attempt to use Token B to execute Action A (or vice versa)
+  // 2. Create brand-new Action B
+  const resEvalB = await request({
+    method: 'POST',
+    path: '/trust/evaluate',
+    body: {
+      agentId: 'agent-alpha',
+      actionType: 'transfer',
+      targetAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      amount: 30,
+      token: 'USDC',
+    },
+  });
+  const actionBId = resEvalB.data.actionRequestId;
+  const tokenB = resEvalB.data.authorizationToken;
+
+  // Print both independent pairs to evidence unconsumed state
+  console.log(`  [Test 5 Setup] Action A: id="${actionAId}", token="${tokenA}"`);
+  console.log(`  [Test 5 Setup] Action B: id="${actionBId}", token="${tokenB}"`);
+
+  // Verify in SQLite that both are fresh and unconsumed at this exact moment
+  const dbRowA = db
+    .prepare('SELECT token_consumed, token_expires_at FROM action_requests WHERE id = ?')
+    .get(actionAId) as { token_consumed: number; token_expires_at: string };
+  const dbRowB = db
+    .prepare('SELECT token_consumed, token_expires_at FROM action_requests WHERE id = ?')
+    .get(actionBId) as { token_consumed: number; token_expires_at: string };
+
+  assert(
+    dbRowA.token_consumed === 0 && dbRowB.token_consumed === 0,
+    'Isolation Evidence: Both Action A and Action B have token_consumed = 0 prior to mismatch call'
+  );
+  assert(
+    new Date(dbRowA.token_expires_at).getTime() > Date.now() &&
+      new Date(dbRowB.token_expires_at).getTime() > Date.now(),
+    'Isolation Evidence: Both Action A and Action B tokens are unexpired prior to mismatch call'
+  );
+
+  // 3. Attempt cross-execution: Execute Action A using Token B
   const resMismatchedExec = await request({
     method: 'POST',
     path: '/actions/execute',
     body: {
-      actionRequestId: expiredActionId, // using Action B's token against a different actionRequestId
-      authorizationToken: tokenB,
+      actionRequestId: actionAId,
+      authorizationToken: tokenB, // Token B does not match Action A!
     },
   });
   assert(
     resMismatchedExec.status === 403 &&
       resMismatchedExec.data.error === 'Forbidden' &&
       resMismatchedExec.data.message.includes('mismatched'),
-    'Security Check 5: Token issued for Action B used on Action A is blocked with 403 Forbidden',
-    `Received status ${resMismatchedExec.status}`
+    'Security Check 5: Token issued for Action B used on Action A is blocked with 403 Forbidden (Mismatched Token)',
+    `Received status ${resMismatchedExec.status}: ${JSON.stringify(resMismatchedExec.data)}`
+  );
+
+  // 4. Verify in DB that Action A's token remains unconsumed after the rejected cross-call
+  const dbRowAPost = db
+    .prepare('SELECT token_consumed, status FROM action_requests WHERE id = ?')
+    .get(actionAId) as { token_consumed: number; status: string };
+  assert(
+    dbRowAPost.token_consumed === 0 && dbRowAPost.status === 'APPROVED',
+    'Post-condition Evidence: Action A remains unconsumed and unaffected by the rejected call'
   );
 
   // Summary
