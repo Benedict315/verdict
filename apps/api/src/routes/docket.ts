@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { DocketEntry } from '@verdict/shared';
+import { getDb } from '../db';
 
 export const docketRouter = Router();
 
-const sampleDocketEntries: DocketEntry[] = [
+const fallbackDocketEntries: DocketEntry[] = [
   {
     id: 'doc-001',
     actionRequestId: 'act-001-transfer',
@@ -48,15 +49,48 @@ const sampleDocketEntries: DocketEntry[] = [
 
 /**
  * GET /docket/search?category=
- * Return up to 5 similar past Docket entries
+ * Return up to 5 similar past Docket entries from SQLite (with fallback)
  */
 docketRouter.get('/search', (req: Request, res: Response) => {
   const category = (req.query.category as string | undefined)?.toLowerCase();
+  const db = getDb();
 
-  let results = sampleDocketEntries;
+  let query = 'SELECT * FROM docket_entries';
+  const params: unknown[] = [];
+
   if (category) {
-    results = sampleDocketEntries.filter((entry) => entry.category.toLowerCase().includes(category));
+    query += ' WHERE LOWER(category) LIKE ?';
+    params.push(`%${category}%`);
+  }
+  query += ' ORDER BY created_at DESC LIMIT 5';
+
+  const rows = db.prepare(query).all(...params) as Array<{
+    id: string;
+    action_request_id: string;
+    category: string;
+    summary: string;
+    human_decision: 'APPROVED' | 'DENIED';
+    created_at: string;
+  }>;
+
+  if (rows.length > 0) {
+    const results: DocketEntry[] = rows.map((r) => ({
+      id: r.id,
+      actionRequestId: r.action_request_id,
+      category: r.category,
+      summary: r.summary,
+      humanDecision: r.human_decision,
+      createdAt: r.created_at,
+    }));
+    return res.json(results);
   }
 
-  return res.json(results.slice(0, 5));
+  // Fallback fixtures if database has no entries for category yet
+  let fallback = fallbackDocketEntries;
+  if (category) {
+    fallback = fallbackDocketEntries.filter((entry) =>
+      entry.category.toLowerCase().includes(category)
+    );
+  }
+  return res.json(fallback.slice(0, 5));
 });
