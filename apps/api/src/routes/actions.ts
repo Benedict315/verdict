@@ -115,31 +115,76 @@ actionsRouter.post('/execute', async (req: Request, res: Response, next: NextFun
       });
     }
 
-    // 6. Call locked chain stub to obtain execution transaction hash
-    const txHash = await executeTransfer(row.target_address as Hex, row.amount);
+    // 6. Claim step (atomic, happens first before chain call to prevent concurrency double-spend race)
+    const claimStmt = db.prepare(`
+      UPDATE action_requests
+      SET status = 'EXECUTING'
+      WHERE id = ?
+        AND authorization_token = ?
+        AND token_consumed = 0
+        AND status = 'APPROVED'
+        AND datetime(token_expires_at) > datetime('now')
+    `);
 
-    // 7. Atomically mark consumed and record tx_hash (guards race condition via affected rows)
-    const updateStmt = db.prepare(`
+    const claimResult = claimStmt.run(row.id, input.authorizationToken);
+
+    if (claimResult.changes === 0) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Action request cannot be executed (already executing, consumed, expired, or claimed)',
+      });
+    }
+
+    // 7. Only the single request that won the claim reaches the chain call
+    let txHash: string;
+    try {
+      txHash = await executeTransfer(row.target_address as Hex, row.amount);
+    } catch (chainErr) {
+      // Chain failure: Roll back status to APPROVED and leave token_consumed = 0 (retryable)
+      db.prepare(`
+        UPDATE action_requests
+        SET status = 'APPROVED'
+        WHERE id = ? AND status = 'EXECUTING'
+      `).run(row.id);
+
+      // Record failure in audit trail
+      db.prepare(`
+        INSERT INTO audit_trail_entries (id, action_request_id, event_type, details, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        `aud-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+        row.id,
+        'CHAIN_EXECUTION_FAILED',
+        JSON.stringify({
+          error: chainErr instanceof Error ? chainErr.message : String(chainErr),
+          targetAddress: row.target_address,
+          amount: row.amount,
+          token: row.token,
+        }),
+        new Date().toISOString()
+      );
+
+      return res.status(502).json({
+        error: 'ChainExecutionError',
+        message: `On-chain transfer execution failed: ${chainErr instanceof Error ? chainErr.message : 'Unknown error'}`,
+        actionRequestId: row.id,
+        retryable: true,
+        tokenConsumed: false,
+      });
+    }
+
+    // 8. On chain success: atomically mark token consumed and record tx_hash
+    const finalizeStmt = db.prepare(`
       UPDATE action_requests
       SET token_consumed = 1,
           status = 'EXECUTED',
           tx_hash = ?
-      WHERE id = ?
-        AND authorization_token = ?
-        AND token_consumed = 0
-        AND datetime(token_expires_at) > datetime('now')
+      WHERE id = ? AND status = 'EXECUTING'
     `);
 
-    const result = updateStmt.run(txHash, row.id, input.authorizationToken);
+    finalizeStmt.run(txHash, row.id);
 
-    if (result.changes === 0) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Failed to atomically consume token (already consumed, expired, or race condition)',
-      });
-    }
-
-    // 8. Record in audit trail
+    // 9. Record success in audit trail
     db.prepare(`
       INSERT INTO audit_trail_entries (id, action_request_id, event_type, details, timestamp)
       VALUES (?, ?, ?, ?, ?)
@@ -151,7 +196,7 @@ actionsRouter.post('/execute', async (req: Request, res: Response, next: NextFun
       new Date().toISOString()
     );
 
-    // 9. Fetch and return updated action request
+    // 10. Fetch and return updated action request
     const updatedRow = db
       .prepare('SELECT * FROM action_requests WHERE id = ?')
       .get(row.id) as ActionRequestRow;

@@ -21,7 +21,7 @@ export interface ActionRequestInput {
 
 export type Decision = 'ALLOW' | 'REVIEW' | 'REJECT';
 
-export type ActionRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXECUTED' | 'FAILED';
+export type ActionRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXECUTING' | 'EXECUTED' | 'FAILED';
 
 export interface ActionRequest {
   id: string;
