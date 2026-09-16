@@ -14,7 +14,11 @@
     "test:api": "tsx scripts/verify-phase1.ts",
     "test:security": "tsx scripts/test-token-bypass.ts",
     "test:chain": "tsx scripts/test-chain-failure.ts",
-    "seed": "npm --workspace=apps/api run seed"
+    "seed": "npm --workspace=apps/api run seed",
+    "contracts:compile": "npm --workspace=packages/contracts run compile",
+    "contracts:test": "npm --workspace=packages/contracts exec hardhat test",
+    "contracts:deploy": "npm --workspace=packages/contracts run deploy:sepolia",
+    "contracts:verify": "npm --workspace=packages/contracts exec hardhat verify --network baseSepolia"
   },
   "keywords": [
     "verdict",
