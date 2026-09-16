@@ -128,6 +128,118 @@ describe('evaluateAction', () => {
     expect(result.decision).toBe('REVIEW');
     expect(result.reasons).toEqual(['risk_flag: new recipient or anomalous amount']);
   });
+
+  // Additional Edge Cases:
+  // Edge Case 1: Amount exactly equal to transactionLimit (boundary)
+  it('proceeds to risk check and allows when amount is exactly equal to transactionLimit', () => {
+    const request: ActionRequestInput = {
+      ...baseRequest,
+      amount: 1000,
+    };
+    const result: EvaluateResult = evaluateAction(
+      baseAgent,
+      request,
+      { isKnownRecipient: true },
+      false
+    );
+    expect(result.decision).toBe('ALLOW');
+    expect(result.reasons).toEqual(['all_checks_passed']);
+  });
+
+  // Edge Case 2: Amount exactly equal to reviewThreshold (boundary)
+  it('reviews when amount is exactly equal to reviewThreshold', () => {
+    const request: ActionRequestInput = {
+      ...baseRequest,
+      amount: 5000,
+    };
+    const result: EvaluateResult = evaluateAction(
+      baseAgent,
+      request,
+      { isKnownRecipient: true },
+      false
+    );
+    expect(result.decision).toBe('REVIEW');
+    expect(result.reasons).toEqual(['policy_review: exceeds limit, within review threshold']);
+  });
+
+  // Edge Case 3: Agent with empty capabilities array
+  it('rejects with capability_missing reason when capabilities array is empty', () => {
+    const agent: Agent = {
+      ...baseAgent,
+      capabilities: [],
+    };
+    const result: EvaluateResult = evaluateAction(
+      agent,
+      baseRequest,
+      { isKnownRecipient: true },
+      false
+    );
+    expect(result.decision).toBe('REJECT');
+    expect(result.reasons).toEqual(["capability_missing: agent not authorized for 'TRANSFER'"]);
+  });
+
+  // Edge Case 4: Agent with verificationStatus 'flagged'
+  it('rejects with identity_unverified reason when verificationStatus is flagged', () => {
+    const agent: Agent = {
+      ...baseAgent,
+      verificationStatus: 'flagged',
+    };
+    const result: EvaluateResult = evaluateAction(
+      agent,
+      baseRequest,
+      { isKnownRecipient: true },
+      false
+    );
+    expect(result.decision).toBe('REJECT');
+    expect(result.reasons).toEqual(['identity_unverified: agent not verified']);
+  });
+
+  // Edge Case 5: Multiple simultaneous failures (first applicable reason wins)
+  it('rejects with only the first applicable reason when multiple failures occur simultaneously', () => {
+    const agent: Agent = {
+      ...baseAgent,
+      verificationStatus: 'unverified',
+      capabilities: [],
+    };
+    const request: ActionRequestInput = {
+      ...baseRequest,
+      amount: 10000,
+    };
+    const result: EvaluateResult = evaluateAction(
+      agent,
+      request,
+      { isKnownRecipient: false, isAnomalousAmount: true },
+      true
+    );
+    expect(result.decision).toBe('REJECT');
+    expect(result.reasons).toEqual(['identity_unverified: agent not verified']);
+    expect(result.reasons).toHaveLength(1);
+  });
+
+  // Edge Case 6: riskContext.isAnomalousAmount true but isKnownRecipient also true
+  it('reviews when isAnomalousAmount is true even if isKnownRecipient is true', () => {
+    const result: EvaluateResult = evaluateAction(
+      baseAgent,
+      baseRequest,
+      { isKnownRecipient: true, isAnomalousAmount: true },
+      false
+    );
+    expect(result.decision).toBe('REVIEW');
+    expect(result.reasons).toEqual(['risk_flag: new recipient or anomalous amount']);
+  });
+
+  // Edge Case 7: Both isKnownRecipient false and isAnomalousAmount true
+  it('reviews without duplicate reasons when both isKnownRecipient is false and isAnomalousAmount is true', () => {
+    const result: EvaluateResult = evaluateAction(
+      baseAgent,
+      baseRequest,
+      { isKnownRecipient: false, isAnomalousAmount: true },
+      false
+    );
+    expect(result.decision).toBe('REVIEW');
+    expect(result.reasons).toEqual(['risk_flag: new recipient or anomalous amount']);
+    expect(result.reasons).toHaveLength(1);
+  });
 });
 
 describe('categorizeForDocket', () => {
