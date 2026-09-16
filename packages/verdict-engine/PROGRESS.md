@@ -2,7 +2,7 @@
 
 Owner: P1 (Verdict Engine / Security Logic)
 Branch: `feature/p1-verdict-engine`
-Last updated: _(update this line each session)_
+Last updated: 2026-09-16
 
 Keep this updated as you go — it's the record P2 will read before wiring your function into `/trust/evaluate`, and it's your own memory of *why* you made each call.
 
@@ -19,7 +19,7 @@ Keep this updated as you go — it's the record P2 will read before wiring your 
 | 5 | Implement Rule 5 (unknown recipient / anomalous amount) | ✅ Done |
 | 6 | Build `categorizeForDocket()` | ✅ Done |
 | 7 | Full test suite + edge cases | ✅ Done |
-| 8 | Handoff to P2 | 🟡 In progress |
+| 8 | Handoff to P2 | ✅ Done |
 
 Update to 🟡 In progress / ✅ Done as you go.
 
@@ -66,17 +66,8 @@ import { Agent, ActionRequestInput, Decision, EvaluateResult } from '@verdict/sh
 
 ## Handoff notes for P2 (fill in at Step 8)
 
-- Final function signature:
-  ```ts
-  function evaluateAction(
-    agent: Agent,
-    request: ActionRequestInput,
-    riskContext: { isKnownRecipient: boolean; isAnomalousAmount?: boolean },
-    hasRecentFlag: boolean
-  ): EvaluateResult
-  ```
-- Any assumptions P2 should know about:
-  `actionRequestId`, `authorizationToken`, and `docketMatches` are omitted / left undefined by the pure engine and should be populated downstream by the API layer.
-- Docket categorization helper:
-  `categorizeForDocket(reasons: string[]): string` returns `"new_recipient"`, `"near_limit"`, or `"uncategorized"`.
+- Final function signature: `evaluateAction(agent: Agent, request: ActionRequestInput, riskContext: { isKnownRecipient: boolean; isAnomalousAmount?: boolean }, hasRecentFlag: boolean): EvaluateResult`
+- Any assumptions P2 should know about: (1) hasRecentFlag and riskContext are NOT part of the Agent/ActionRequestInput types — P2's API layer must compute/pass these in separately before calling evaluateAction. (2) The function only returns { decision, reasons } — actionRequestId, authorizationToken, and docketMatches must be populated by the API layer after calling this function. (3) On REJECT, only the first failing rule's reason is returned, not an accumulated list — this is intentional (matches spec order).
+- Known edge cases not covered: values are assumed to be valid types already (e.g. no NaN/negative amount handling) — worth confirming with P2 whether the API layer validates input shape before calling evaluateAction, or if the engine should defensively check too.
+
 
