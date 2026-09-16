@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { Agent } from '@verdict/shared';
+import { Agent, VerificationStatus } from '@verdict/shared';
+import { getDb } from '../db';
 
 export const agentsRouter = Router();
 
@@ -13,23 +14,74 @@ const createAgentSchema = z.object({
   reviewThreshold: z.number().nonnegative(),
 });
 
+interface AgentRow {
+  id: string;
+  wallet_address: string;
+  display_name: string;
+  verification_status: VerificationStatus;
+  transaction_limit: number;
+  review_threshold: number;
+  created_at: string;
+}
+
 /**
  * POST /agents
- * Register an agent (wallet, capabilities, limit, verification status)
+ * Register an agent in SQLite
  */
 agentsRouter.post('/', (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createAgentSchema.parse(req.body);
+    const db = getDb();
+    const existing = db
+      .prepare('SELECT id FROM agents WHERE wallet_address = ?')
+      .get(parsed.walletAddress) as { id: string } | undefined;
+    const id = existing ? existing.id : `agent-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+
+    const insertAgent = db.prepare(`
+      INSERT INTO agents (id, wallet_address, display_name, verification_status, transaction_limit, review_threshold, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(wallet_address) DO UPDATE SET
+        display_name = excluded.display_name,
+        verification_status = excluded.verification_status,
+        transaction_limit = excluded.transaction_limit,
+        review_threshold = excluded.review_threshold
+    `);
+
+    const insertCap = db.prepare(`
+      INSERT OR IGNORE INTO agent_capabilities (id, agent_id, capability, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    const tx = db.transaction(() => {
+      insertAgent.run(
+        id,
+        parsed.walletAddress,
+        parsed.displayName,
+        parsed.verificationStatus,
+        parsed.transactionLimit,
+        parsed.reviewThreshold,
+        createdAt
+      );
+
+      for (const cap of parsed.capabilities) {
+        insertCap.run(`cap-${id}-${cap}`, id, cap, createdAt);
+      }
+    });
+
+    tx();
+
     const createdAgent: Agent = {
-      id: `agent-${Date.now()}`,
+      id,
       walletAddress: parsed.walletAddress,
       displayName: parsed.displayName,
       capabilities: parsed.capabilities,
       verificationStatus: parsed.verificationStatus,
       transactionLimit: parsed.transactionLimit,
       reviewThreshold: parsed.reviewThreshold,
-      createdAt: new Date().toISOString(),
+      createdAt,
     };
+
     return res.status(201).json(createdAgent);
   } catch (err) {
     return next(err);
@@ -38,52 +90,34 @@ agentsRouter.post('/', (req: Request, res: Response, next: NextFunction) => {
 
 /**
  * GET /agents/:id
- * Fetch agent passport
+ * Fetch agent passport from SQLite
  */
 agentsRouter.get('/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const db = getDb();
 
-  if (id === 'unknown') {
+  const agentRow = db
+    .prepare('SELECT * FROM agents WHERE id = ?')
+    .get(id) as AgentRow | undefined;
+
+  if (!agentRow) {
     return res.status(404).json({ error: 'Agent not found' });
   }
 
-  if (id === 'agent-alpha' || id.includes('alpha')) {
-    const agentAlpha: Agent = {
-      id: 'agent-alpha',
-      walletAddress: '0x1111111111111111111111111111111111111111',
-      displayName: 'Agent Alpha',
-      capabilities: ['transfer', 'swap'],
-      verificationStatus: 'verified',
-      transactionLimit: 1000,
-      reviewThreshold: 200,
-      createdAt: '2026-01-01T00:00:00.000Z',
-    };
-    return res.json(agentAlpha);
-  }
+  const capRows = db
+    .prepare('SELECT capability FROM agent_capabilities WHERE agent_id = ?')
+    .all(id) as Array<{ capability: string }>;
 
-  if (id === 'agent-shadow' || id.includes('shadow')) {
-    const agentShadow: Agent = {
-      id: 'agent-shadow',
-      walletAddress: '0x9999999999999999999999999999999999999999',
-      displayName: 'Agent Shadow',
-      capabilities: [],
-      verificationStatus: 'unverified',
-      transactionLimit: 0,
-      reviewThreshold: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-    };
-    return res.json(agentShadow);
-  }
-
-  const genericAgent: Agent = {
-    id,
-    walletAddress: '0x2222222222222222222222222222222222222222',
-    displayName: `Agent ${id}`,
-    capabilities: ['transfer'],
-    verificationStatus: 'verified',
-    transactionLimit: 500,
-    reviewThreshold: 100,
-    createdAt: new Date().toISOString(),
+  const agent: Agent = {
+    id: agentRow.id,
+    walletAddress: agentRow.wallet_address,
+    displayName: agentRow.display_name,
+    capabilities: capRows.map((c) => c.capability),
+    verificationStatus: agentRow.verification_status,
+    transactionLimit: agentRow.transaction_limit,
+    reviewThreshold: agentRow.review_threshold,
+    createdAt: agentRow.created_at,
   };
-  return res.json(genericAgent);
+
+  return res.json(agent);
 });

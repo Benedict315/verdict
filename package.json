@@ -12,7 +12,14 @@
     "dev:web": "npm --workspace=apps/web run dev",
     "build": "npm run build --workspaces --if-present",
     "test:api": "tsx scripts/verify-phase1.ts",
-    "seed": "npm --workspace=apps/api run seed"
+    "test:security": "tsx scripts/test-token-bypass.ts",
+    "test:chain": "tsx scripts/test-chain-failure.ts",
+    "test:rehearse": "tsx scripts/rehearse-demo.ts",
+    "seed": "npm --workspace=apps/api run seed",
+    "contracts:compile": "npm --workspace=packages/contracts run compile",
+    "contracts:test": "npm --workspace=packages/contracts exec hardhat test",
+    "contracts:deploy": "npm --workspace=packages/contracts run deploy:sepolia",
+    "contracts:verify": "npm --workspace=packages/contracts exec hardhat verify --network baseSepolia"
   },
   "keywords": [
     "verdict",

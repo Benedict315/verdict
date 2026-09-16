@@ -21,7 +21,7 @@ export interface ActionRequestInput {
 
 export type Decision = 'ALLOW' | 'REVIEW' | 'REJECT';
 
-export type ActionRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXECUTED' | 'FAILED';
+export type ActionRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXECUTING' | 'EXECUTED' | 'FAILED';
 
 export interface ActionRequest {
   id: string;
@@ -37,6 +37,7 @@ export interface ActionRequest {
   tokenConsumed: boolean;
   txHash: string | null;
   status: ActionRequestStatus;
+  auditTrail?: AuditTrailEntry[];
   createdAt: string;
 }
 

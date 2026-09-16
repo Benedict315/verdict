@@ -126,6 +126,8 @@ async function runTests() {
       token: 'USDC',
     },
   });
+  const alphaActionId = resEvalAlpha.data?.actionRequestId;
+  const alphaToken = resEvalAlpha.data?.authorizationToken;
   assert(
     resEvalAlpha.status === 200 &&
       resEvalAlpha.data.decision === 'ALLOW' &&
@@ -165,7 +167,7 @@ async function runTests() {
   const resExecForbidden = await request({
     method: 'POST',
     path: '/actions/execute',
-    body: { actionRequestId: 'act-123', authorizationToken: 'invalid-or-unauthorized-token' },
+    body: { actionRequestId: alphaActionId, authorizationToken: 'invalid-or-unauthorized-token' },
   });
   assert(resExecForbidden.status === 403, 'POST /actions/execute with invalid token returns 403 Forbidden');
 
@@ -173,7 +175,7 @@ async function runTests() {
   const resExecSuccess = await request({
     method: 'POST',
     path: '/actions/execute',
-    body: { actionRequestId: 'act-alpha-001', authorizationToken: 'auth-tok-alpha-demo' },
+    body: { actionRequestId: alphaActionId, authorizationToken: alphaToken },
   });
   assert(
     resExecSuccess.status === 200 &&
@@ -191,13 +193,26 @@ async function runTests() {
   );
 
   // Test 13: GET /actions/:id
-  const resGetAction = await request({ method: 'GET', path: '/actions/act-alpha-001' });
-  assert(resGetAction.status === 200 && resGetAction.data.id === 'act-alpha-001', 'GET /actions/:id returns ActionRequest');
+  const resGetAction = await request({ method: 'GET', path: `/actions/${alphaActionId}` });
+  assert(resGetAction.status === 200 && resGetAction.data.id === alphaActionId, 'GET /actions/:id returns ActionRequest');
 
-  // Test 14: POST /actions/:id/review (approve = true)
+  // Test 14: POST /actions/:id/review (evaluate a review request first, then approve = true)
+  const resEvalReview = await request({
+    method: 'POST',
+    path: '/trust/evaluate',
+    body: {
+      agentId: 'agent-beta',
+      actionType: 'transfer',
+      targetAddress: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
+      amount: 250,
+      token: 'USDC',
+    },
+  });
+  const reviewActionId = resEvalReview.data?.actionRequestId;
+
   const resReviewApprove = await request({
     method: 'POST',
-    path: '/actions/act-review-003/review',
+    path: `/actions/${reviewActionId}/review`,
     body: { approve: true },
   });
   assert(

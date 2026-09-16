@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS action_requests (
     token_expires_at TEXT,
     token_consumed INTEGER NOT NULL DEFAULT 0 CHECK (token_consumed IN (0, 1)),
     tx_hash TEXT,
-    status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXECUTED', 'FAILED')) DEFAULT 'PENDING',
+    status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXECUTING', 'EXECUTED', 'FAILED')) DEFAULT 'PENDING',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

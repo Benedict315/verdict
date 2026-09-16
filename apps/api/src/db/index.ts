@@ -25,5 +25,20 @@ export function initSchema(): void {
 
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schemaSql);
-  console.log('[Verdict DB] Schema initialized successfully (5 tables ready)');
+
+  // Apply migrations
+  const migrationsDir = path.resolve(__dirname, 'migrations');
+  if (fs.existsSync(migrationsDir)) {
+    const migrationFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+    for (const file of migrationFiles) {
+      const migrationSql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+      db.exec(migrationSql);
+    }
+  }
+
+  // Seed default agents (Agent Alpha & Agent Shadow)
+  const { seedAgents } = require('./seed');
+  seedAgents(db);
+
+  console.log('[Verdict DB] Schema and migrations initialized successfully (5 tables ready)');
 }
