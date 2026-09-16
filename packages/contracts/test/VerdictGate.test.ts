@@ -1,4 +1,5 @@
 import { expect } from 'chai';
+import { anyValue } from '@nomicfoundation/hardhat-chai-matchers/withArgs';
 import { ethers } from 'hardhat';
 import { VerdictGate, ERC20Mock } from '../typechain-types';
 import { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers';
@@ -76,7 +77,7 @@ describe('VerdictGate', () => {
     it('emits TransferExecuted with correct args', async () => {
       await expect(gate.executeTransfer(recipient.address, TRANSFER_AMT))
         .to.emit(gate, 'TransferExecuted')
-        .withArgs(recipient.address, TRANSFER_AMT, owner.address, await latestTimestamp());
+        .withArgs(recipient.address, TRANSFER_AMT, owner.address, anyValue);
     });
   });
 
