@@ -27,12 +27,14 @@ const config: HardhatUserConfig = {
       chainId:  84532,
     },
   },
-  // Basescan (Base Sepolia) contract verification
-  // Uses the Etherscan-compatible API — no API key required for Base Sepolia
+  // Sourcify verification — no API key required, works out of the box
+  sourcify: {
+    enabled: true,
+  },
+  // Etherscan/Basescan — requires a free API key from https://basescan.org
+  // Set BASESCAN_API_KEY in apps/api/.env to enable
   etherscan: {
-    apiKey: {
-      baseSepolia: process.env.BASESCAN_API_KEY ?? 'PLACEHOLDER',
-    },
+    apiKey: process.env.BASESCAN_API_KEY ?? '',
     customChains: [
       {
         network:    'baseSepolia',
