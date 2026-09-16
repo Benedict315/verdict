@@ -15,6 +15,12 @@ dist/
 build/
 .next/
 out/
+*.tsbuildinfo
+
+# Hardhat (packages/contracts)
+packages/contracts/artifacts/
+packages/contracts/cache/
+packages/contracts/typechain-types/
 
 # Database
 *.db
