@@ -12,14 +12,14 @@ Keep this updated as you go — it's the record P2 will read before wiring your 
 
 | Step | Description | Status |
 |---|---|---|
-| 1 | Lock shared types with team | ⬜ Not started |
-| 2 | Write test matrix (failing tests) | ⬜ Not started |
-| 3 | Implement Rules 1–3 (identity, capability, reputation) | ⬜ Not started |
-| 4 | Implement Rule 4 (limit + review threshold) | ⬜ Not started |
-| 5 | Implement Rule 5 (unknown recipient / anomalous amount) | ⬜ Not started |
-| 6 | Build `categorizeForDocket()` | ⬜ Not started |
-| 7 | Full test suite + edge cases | ⬜ Not started |
-| 8 | Handoff to P2 | ⬜ Not started |
+| 1 | Lock shared types with team | ✅ Done |
+| 2 | Write test matrix (failing tests) | ✅ Done |
+| 3 | Implement Rules 1–3 (identity, capability, reputation) | ✅ Done |
+| 4 | Implement Rule 4 (limit + review threshold) | ✅ Done |
+| 5 | Implement Rule 5 (unknown recipient / anomalous amount) | ✅ Done |
+| 6 | Build `categorizeForDocket()` | ✅ Done |
+| 7 | Full test suite + edge cases | ✅ Done |
+| 8 | Handoff to P2 | 🟡 In progress |
 
 Update to 🟡 In progress / ✅ Done as you go.
 
@@ -29,7 +29,8 @@ Update to 🟡 In progress / ✅ Done as you go.
 
 Record any choice that isn't 100% spelled out in the spec, or anywhere you deviated and why.
 
-- _(example) Used `>=` not `>` for the hard limit comparison — chose to REJECT exactly-at-limit amounts, confirm with team if this should be ALLOW instead._
+- Rules evaluated in strict order (1 to 6) with first match winning.
+- Result returns only `{ decision, reasons }` without populating `actionRequestId`, `authorizationToken`, or `docketMatches`.
 
 ---
 
@@ -38,7 +39,7 @@ Record any choice that isn't 100% spelled out in the spec, or anywhere you devia
 Paste the final agreed shape of `Agent`, `ActionRequestInput`, and `EvaluateResult` here once locked with the team.
 
 ```ts
-// paste from packages/shared/types.ts once finalized
+import { Agent, ActionRequestInput, Decision, EvaluateResult } from '@verdict/shared';
 ```
 
 ---
@@ -47,24 +48,35 @@ Paste the final agreed shape of `Agent`, `ActionRequestInput`, and `EvaluateResu
 
 | # | Scenario | Expected | Passing? |
 |---|---|---|---|
-| 1 | Verified agent + valid amount | ALLOW | ⬜ |
-| 2 | Unverified agent | REJECT | ⬜ |
-| 3 | Missing capability | REJECT | ⬜ |
-| 4 | Amount above hard limit | REJECT | ⬜ |
-| 5 | Borderline amount | REVIEW | ⬜ |
-| 6 | Unknown recipient | REVIEW | ⬜ |
-| 7 | Recent reputation flag | REJECT | ⬜ |
+| 1 | Verified agent + valid amount | ALLOW | ✅ |
+| 2 | Unverified agent | REJECT | ✅ |
+| 3 | Missing capability | REJECT | ✅ |
+| 4 | Recent reputation flag | REJECT | ✅ |
+| 5 | Borderline amount | REVIEW | ✅ |
+| 6 | Amount above hard limit | REJECT | ✅ |
+| 7 | Unknown recipient | REVIEW | ✅ |
 
 ---
 
 ## Open questions / blockers
 
-- _(list anything you need from the team here)_
+- None
 
 ---
 
 ## Handoff notes for P2 (fill in at Step 8)
 
 - Final function signature:
+  ```ts
+  function evaluateAction(
+    agent: Agent,
+    request: ActionRequestInput,
+    riskContext: { isKnownRecipient: boolean; isAnomalousAmount?: boolean },
+    hasRecentFlag: boolean
+  ): EvaluateResult
+  ```
 - Any assumptions P2 should know about:
-- Known edge cases not covered:
+  `actionRequestId`, `authorizationToken`, and `docketMatches` are omitted / left undefined by the pure engine and should be populated downstream by the API layer.
+- Docket categorization helper:
+  `categorizeForDocket(reasons: string[]): string` returns `"new_recipient"`, `"near_limit"`, or `"uncategorized"`.
+
