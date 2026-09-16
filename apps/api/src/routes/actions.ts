@@ -236,7 +236,36 @@ actionsRouter.get('/:id', (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Action request not found' });
   }
 
-  return res.json(mapRowToActionRequest(row));
+  const action = mapRowToActionRequest(row);
+
+  // Attach full audit trail
+  const auditRows = db
+    .prepare('SELECT * FROM audit_trail_entries WHERE action_request_id = ? ORDER BY timestamp ASC')
+    .all(id) as Array<{
+      id: string;
+      action_request_id: string;
+      event_type: string;
+      details: string;
+      timestamp: string;
+    }>;
+
+  action.auditTrail = auditRows.map((a) => {
+    let details: Record<string, unknown> | string = a.details;
+    try {
+      details = JSON.parse(a.details);
+    } catch {
+      details = a.details;
+    }
+    return {
+      id: a.id,
+      actionRequestId: a.action_request_id,
+      eventType: a.event_type,
+      details,
+      timestamp: a.timestamp,
+    };
+  });
+
+  return res.json(action);
 });
 
 /**

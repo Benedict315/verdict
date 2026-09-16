@@ -37,6 +37,7 @@ export interface ActionRequest {
   tokenConsumed: boolean;
   txHash: string | null;
   status: ActionRequestStatus;
+  auditTrail?: AuditTrailEntry[];
   createdAt: string;
 }
 
