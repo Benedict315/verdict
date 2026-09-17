@@ -457,8 +457,11 @@ function TrustCheckContent() {
                   </div>
                 </div>
 
-                {/* Embedded Docket Panel */}
-                {currentDocketMatches && <DocketPanel entries={currentDocketMatches} />}
+                {/* Embedded Docket Panel - Visible only when decision === 'REVIEW' */}
+                <DocketPanel
+                  category="transfer"
+                  fallbackEntries={currentDocketMatches}
+                />
               </div>
             )}
           </div>
